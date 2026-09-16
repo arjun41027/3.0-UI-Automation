@@ -1,0 +1,42 @@
+{
+  "name": "survey-automation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cypress + BDD automation framework for the Survey application (Future Club environment)",
+  "scripts": {
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "test": "npm run cypress:run",
+    "clean:reports": "rimraf cypress/reports allure-results allure-report cypress/screenshots",
+    "test:with:allure": "npm run clean:reports && cypress run",
+    "test:all": "npm run clean:reports && cypress run --spec \"cypress/e2e/features/department.feature,cypress/e2e/features/messageTemplate.feature,cypress/e2e/features/role.feature,cypress/e2e/features/user.feature\"",
+    "test:ordered": "npm run clean:reports && cypress run --spec \"cypress/e2e/features/login.feature,cypress/e2e/features/department.feature,cypress/e2e/features/role.feature,cypress/e2e/features/user.feature,cypress/e2e/features/messageTemplate.feature,cypress/e2e/features/campaign.feature\"",
+    "test:campaign": "cypress run --spec \"cypress/e2e/features/login.feature,cypress/e2e/features/campaign.feature\"",
+    "test:department": "cypress run --spec \"cypress/e2e/features/login.feature,cypress/e2e/features/department.feature\"",
+    "test:message-template": "cypress run --spec \"cypress/e2e/features/login.feature,cypress/e2e/features/messageTemplate.feature\"",
+    "test:role": "cypress run --spec \"cypress/e2e/features/login.feature,cypress/e2e/features/role.feature\"",
+    "test:user": "cypress run --spec \"cypress/e2e/features/login.feature,cypress/e2e/features/user.feature\"",
+    "setup:test": "node scripts/pre-test-setup.js",
+    "test:all:modules": "npm run setup:test && npm run clean:reports && cypress run --spec \"cypress/e2e/features/login.feature,cypress/e2e/features/department.feature,cypress/e2e/features/role.feature,cypress/e2e/features/user.feature,cypress/e2e/features/messageTemplate.feature,cypress/e2e/features/campaign.feature\" && npm run report:allure:generate",
+    "test:all:modules:headed": "npm run setup:test && npm run clean:reports && cypress open --spec \"cypress/e2e/features/login.feature,cypress/e2e/features/department.feature,cypress/e2e/features/role.feature,cypress/e2e/features/user.feature,cypress/e2e/features/messageTemplate.feature,cypress/e2e/features/campaign.feature\"",
+    "report:allure:generate": "allure generate allure-results --clean -o allure-report",
+    "report:allure:open": "allure open allure-report",
+    "allure:report": "allure generate allure-results --clean -o allure-report --single-file"
+  },
+  "devDependencies": {
+    "@4tw/cypress-drag-drop": "^2.2.5",
+    "@badeball/cypress-cucumber-preprocessor": "^20.1.2",
+    "@bahmutov/cypress-esbuild-preprocessor": "^2.2.5",
+    "@cypress/grep": "^4.1.0",
+    "@shelex/cypress-allure-plugin": "^2.41.1",
+    "allure-commandline": "^2.30.0",
+    "cypress": "^13.17.0",
+    "cypress-file-upload": "^5.0.8",
+    "cypress-mochawesome-reporter": "^3.8.2",
+    "cypress-real-events": "^1.13.0",
+    "cypress-xpath": "^2.0.1",
+    "esbuild": "^0.21.5",
+    "mssql": "^12.7.0",
+    "rimraf": "^5.0.5"
+  }
+}
