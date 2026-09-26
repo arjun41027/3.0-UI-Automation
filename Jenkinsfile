@@ -34,7 +34,7 @@ pipeline {
                 npm install
               fi
             '''
-          else
+          } else {
             bat '''
               @echo off
               node --version
@@ -50,7 +50,7 @@ pipeline {
               )
               exit /b %ERRORLEVEL%
             '''
-          fi
+          }
         }
       }
     }
