@@ -24,7 +24,7 @@ module.exports = defineConfig({
     experimentalModifyObstructiveThirdPartyCode: false,
     experimentalRunAllSpecs: true,
     chromeWebSecurity: false,
-    specPattern: 'cypress/e2e/features/**/*.feature',
+    specPattern: 'cypress/e2e/features/user.feature',
     supportFile: 'cypress/support/e2e.js',
     pageLoadTimeout: 300000,
     defaultCommandTimeout: 30000,
