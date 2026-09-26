@@ -1,7 +1,5 @@
 pipeline {
-  agent {
-    label 'linux'
-  }
+  agent any
 
   // Configure this NodeJS installation in Jenkins Global Tool Configuration.
   tools {
@@ -23,17 +21,37 @@ pipeline {
 
     stage('Install Dependencies') {
       steps {
-        sh '''
-          node --version
-          npm --version
+        script {
+          if (isUnix()) {
+            sh '''
+              node --version
+              npm --version
 
-          if [ -f package-lock.json ]; then
-            npm ci
+              if [ -f package-lock.json ]; then
+                npm ci
+              else
+                echo "package-lock.json not found; falling back to npm install"
+                npm install
+              fi
+            '''
           else
-            echo "package-lock.json not found; falling back to npm install"
-            npm install
+            bat '''
+              @echo off
+              node --version
+              if errorlevel 1 exit /b 1
+              npm --version
+              if errorlevel 1 exit /b 1
+
+              if exist package-lock.json (
+                call npm ci
+              ) else (
+                echo package-lock.json not found; falling back to npm install
+                call npm install
+              )
+              exit /b %ERRORLEVEL%
+            '''
           fi
-        '''
+        }
       }
     }
 
@@ -41,7 +59,13 @@ pipeline {
       steps {
         // Preserve FAILURE while allowing Publish Results to archive test output.
         catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-          sh 'npm run cypress:run -- --config video=true'
+          script {
+            if (isUnix()) {
+              sh 'npm run cypress:run -- --config video=true'
+            } else {
+              bat 'call npm run cypress:run -- --config video=true'
+            }
+          }
         }
       }
     }
@@ -57,10 +81,18 @@ pipeline {
         script {
           if (fileExists('allure-results')) {
             // Allure writes one *-result.json file per test result.
-            def resultFile = sh(
-              script: "find allure-results -type f -name '*-result.json' -print -quit",
-              returnStdout: true
-            ).trim()
+            def resultFile
+            if (isUnix()) {
+              resultFile = sh(
+                script: "find allure-results -type f -name '*-result.json' -print -quit",
+                returnStdout: true
+              ).trim()
+            } else {
+              resultFile = bat(
+                script: '@echo off\r\nfor /r allure-results %%F in (*-result.json) do @echo %%F',
+                returnStdout: true
+              ).trim()
+            }
 
             if (resultFile) {
               // Requires the Allure Jenkins plugin and an Allure tool configured in Jenkins.
