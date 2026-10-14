@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -5,116 +6,127 @@ pipeline {
         nodejs 'NodeJS 22'
     }
 
-    environment {
-        TAGS = '@smoke'
-    }
-
     options {
         buildDiscarder(logRotator(numToKeepStr: '20'))
         timestamps()
-        timeout(time: 60, unit: 'MINUTES')
     }
 
     stages {
-        stage('Checkout Automation Code') {
+        stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Verify Node.js and npm') {
-            steps {
-                sh '''
-                    echo "===== NODE VERSION ====="
-                    node --version
-
-                    echo "===== NPM VERSION ====="
-                    npm --version
-
-                    echo "===== WORKSPACE ====="
-                    pwd
-                '''
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    if [ -f package-lock.json ]; then
-                        echo "Installing dependencies using npm ci"
-                        npm ci
-                    else
-                        echo "package-lock.json not found; using npm install"
-                        npm install
-                    fi
-                '''
-            }
-        }
+                script {
+                    if (isUnix()) {
+                        sh '''
+                            set -e
+                            node --version
+                            npm --version
 
-        stage('Clean Previous Test Results') {
-            steps {
-                sh '''
-                    if npm run | grep -q "clean:reports"; then
-                        npm run clean:reports
-                    else
-                        echo "No clean:reports script found; skipping cleanup"
-                    fi
-                '''
-            }
-        }
+                            if [ -f package-lock.json ]; then
+                                npm ci
+                            else
+                                echo "package-lock.json not found; using npm install"
+                                npm install
+                            fi
+                        '''
+                    } else {
+                        bat '''
+                            @echo off
+                            node --version
+                            if errorlevel 1 exit /b 1
 
-        stage('Run Cypress Smoke Tests') {
-            steps {
-                catchError(
-                    buildResult: 'FAILURE',
-                    stageResult: 'FAILURE'
-                ) {
-                    sh '''
-                        echo "===== RUNNING SMOKE TESTS ====="
-                        echo "Cucumber tag filter: ${TAGS}"
+                            npm --version
+                            if errorlevel 1 exit /b 1
 
-                        TAGS="${TAGS}" npm run cypress:run -- --config video=true
-                    '''
+                            if exist package-lock.json (
+                                call npm ci
+                            ) else (
+                                echo package-lock.json not found; using npm install
+                                call npm install
+                            )
+
+                            if errorlevel 1 exit /b 1
+                        '''
+                    }
                 }
             }
         }
 
-        stage('Archive Test Results') {
+        stage('Cypress Tests') {
             steps {
-                archiveArtifacts(
-                    artifacts: 'cypress/reports/**/*,cypress/screenshots/**/*,cypress/videos/**/*,allure-results/**/*',
-                    allowEmptyArchive: true,
-                    fingerprint: true
-                )
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    script {
+                        if (isUnix()) {
+                            sh 'npm run cypress:run -- --config video=true'
+                        } else {
+                            bat 'call npm run cypress:run -- --config video=true'
+                        }
+                    }
+                }
             }
         }
 
-        stage('Publish Allure Report') {
+        stage('Publish Results') {
             steps {
+                echo 'Archiving Cypress test artifacts...'
+
+                archiveArtifacts(
+                    artifacts: 'cypress/reports/**/*,cypress/screenshots/**/*,cypress/videos/**/*,allure-results/**/*',
+                    allowEmptyArchive: true
+                )
+
                 script {
-                    if (fileExists('allure-results')) {
-                        def resultFiles = findFiles(
-                            glob: 'allure-results/*-result.json'
+                    def allureResultsExist = false
+
+                    if (isUnix()) {
+                        int checkResult = sh(
+                            script: '''
+                                if [ -d allure-results ] &&
+                                   find allure-results -type f -name '*-result.json' -print -quit | grep -q .; then
+                                    exit 0
+                                else
+                                    exit 1
+                                fi
+                            ''',
+                            returnStatus: true
                         )
 
-                        if (resultFiles.length > 0) {
-                            catchError(
-                                buildResult: 'UNSTABLE',
-                                stageResult: 'UNSTABLE'
-                            ) {
-                                allure(
-                                    includeProperties: false,
-                                    jdk: '',
-                                    results: [
-                                        [path: 'allure-results']
-                                    ]
+                        allureResultsExist = (checkResult == 0)
+                    } else {
+                        int checkResult = bat(
+                            script: '''
+                                @echo off
+                                if not exist "allure-results" exit /b 1
+
+                                for /r "allure-results" %%F in (*-result.json) do (
+                                    if exist "%%F" exit /b 0
                                 )
-                            }
-                        } else {
-                            echo 'No Allure result JSON files found.'
+
+                                exit /b 1
+                            ''',
+                            returnStatus: true
+                        )
+
+                        allureResultsExist = (checkResult == 0)
+                    }
+
+                    if (allureResultsExist) {
+                        echo 'Allure test result files found.'
+
+                        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+                            allure(
+                                includeProperties: false,
+                                jdk: '',
+                                results: [[path: 'allure-results']]
+                            )
                         }
                     } else {
-                        echo 'allure-results directory was not generated.'
+                        echo 'No Allure *-result.json files found. Skipping Allure publication.'
                     }
                 }
             }
@@ -122,16 +134,17 @@ pipeline {
     }
 
     post {
+        always {
+            echo "Final Jenkins build result: ${currentBuild.currentResult}"
+            echo 'Cypress pipeline completed. Check archived artifacts and console logs.'
+        }
+
         success {
-            echo 'Cypress smoke tests completed successfully.'
+            echo 'Cypress test run succeeded.'
         }
 
         failure {
-            echo 'Cypress smoke tests failed. Review the Jenkins console and archived reports.'
-        }
-
-        always {
-            echo "Final Jenkins build result: ${currentBuild.currentResult}"
+            echo 'Cypress pipeline failed. Review the Cypress output and archived artifacts.'
         }
     }
 }
